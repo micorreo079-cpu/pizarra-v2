@@ -48,10 +48,14 @@ class MainActivity : AppCompatActivity() {
 
         setContentView(R.layout.activity_main)
 
+        // Sin WiFi NO se cierra la app: el Modo V2 puede conectar por Bluetooth
+        // (sin red) y el usuario puede conectar el WiFi más tarde. Solo se avisa.
         if (!NetworkUtils.isWifiConnected(this)) {
-            Toast.makeText(this, "Please connect to WiFi", Toast.LENGTH_LONG).show()
-            finish()
-            return
+            Toast.makeText(
+                this,
+                "Sin WiFi: solo disponible Bluetooth (Modo V2). Conecta WiFi para el resto.",
+                Toast.LENGTH_LONG
+            ).show()
         }
 
         val ipInput = findViewById<EditText>(R.id.ipInput)
