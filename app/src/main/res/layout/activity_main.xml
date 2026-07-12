@@ -3,8 +3,14 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
-    android:gravity="center"
+    android:gravity="center_horizontal"
     android:padding="16dp">
+
+    <!-- Espaciador superior: empuja el contenido al centro -->
+    <View
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:layout_weight="1" />
 
     <EditText
         android:id="@+id/ipInput"
@@ -45,4 +51,18 @@
         android:layout_marginTop="24dp"
         android:backgroundTint="#1B5E20"
         android:text="Modo V2" />
+
+    <!-- Espaciador inferior: deja el botón Check updates abajo del todo -->
+    <View
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:layout_weight="1" />
+
+    <Button
+        android:id="@+id/btnCheckUpdate"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Check updates"
+        android:textColor="#555555"
+        android:backgroundTint="#E0E0E0" />
 </LinearLayout>

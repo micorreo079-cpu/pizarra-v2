@@ -68,6 +68,12 @@ class MainActivity : AppCompatActivity() {
         val btnAutoConnect = findViewById<Button>(R.id.btnAutoConnect)
         val btnManualConnect = findViewById<Button>(R.id.btnManualConnect)
 
+        // Botón "Check updates": comprobación manual inmediata (ignora el gate
+        // mensual). Sin update → "You have the latest version".
+        findViewById<Button>(R.id.btnCheckUpdate).setOnClickListener {
+            manualCheckUpdate()
+        }
+
         // Modo V2: lanza la pizarra en modo SERVIDOR de red (escucha y acepta la
         // conexión del emisor). Mismas funciones, solo cambia la conexión.
         findViewById<Button>(R.id.btnModoV2).setOnClickListener {
@@ -178,6 +184,44 @@ class MainActivity : AppCompatActivity() {
             }
         } catch (e: Exception) {
             Log.e("MainActivity", "maybeCheckOta: ${e.message}")
+        }
+    }
+
+    // Comprobación MANUAL (botón Check updates): siempre llama al servidor.
+    private fun manualCheckUpdate() {
+        Toast.makeText(this, "Checking for updates…", Toast.LENGTH_SHORT).show()
+        val license = getSharedPreferences(APP_SETTINGS_NAME, MODE_PRIVATE)
+            .getString("received_license_name", "") ?: ""
+        lifecycleScope.launch {
+            val installed = packageManager.getPackageInfo(packageName, 0).versionName ?: ""
+            val info = OtaUpdater.checkForUpdate(this@MainActivity, license, license)
+            val ota = getSharedPreferences("ota", MODE_PRIVATE)
+            if (info == null) {
+                Toast.makeText(
+                    this@MainActivity,
+                    "Could not check for updates. Try again later.",
+                    Toast.LENGTH_LONG
+                ).show()
+                return@launch
+            }
+            // El servidor respondió: cuenta también como comprobación mensual.
+            ota.edit().putLong("last_check_ms", System.currentTimeMillis()).apply()
+            if (info.available && info.latestVersion.isNotEmpty() &&
+                info.latestVersion != installed && info.downloadUrl.isNotEmpty()
+            ) {
+                ota.edit()
+                    .putString("pending_version", info.latestVersion)
+                    .putString("pending_url", info.downloadUrl)
+                    .apply()
+                showUpdateDialog(info.latestVersion, info.downloadUrl)
+            } else {
+                ota.edit().remove("pending_version").remove("pending_url").apply()
+                Toast.makeText(
+                    this@MainActivity,
+                    "You have the latest version.",
+                    Toast.LENGTH_LONG
+                ).show()
+            }
         }
     }
 
