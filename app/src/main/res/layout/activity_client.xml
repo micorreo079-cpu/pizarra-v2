@@ -1,0 +1,182 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/rootLayout"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@android:color/transparent">
+
+    <ImageView
+        android:id="@+id/imageView"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="@android:color/transparent" />
+
+    <TextView
+        android:id="@+id/statusIndicator"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="90dp"
+        android:layout_marginTop="10dp"
+        android:text="×"
+        android:textSize="56dp"
+        android:textStyle="bold"
+        android:textColor="@android:color/darker_gray"
+        android:alpha="0.6" />
+
+    <!-- 左上角大触控区：长按与左下组合关应用；1.5 秒内三击重连 -->
+    <Button
+        android:id="@+id/btnCombined"
+        android:layout_width="160dp"
+        android:layout_height="160dp"
+        android:layout_alignParentStart="true"
+        android:layout_alignParentTop="true"
+        android:background="@android:color/transparent"
+        android:contentDescription="左上角触控：三击重连，长按与左下组合关闭" />
+
+    <!-- 笔刷：与左侧保存按钮同款污点图标；排在左上角大按钮下方 -->
+    <LinearLayout
+        android:id="@+id/brushButtonsContainer"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_alignParentStart="true"
+        android:layout_below="@id/btnCombined"
+        android:layout_marginStart="40dp"
+        android:layout_marginTop="6dp"
+        android:orientation="vertical"
+        android:gravity="center_horizontal"
+        android:visibility="gone">
+
+        <ImageView
+            android:id="@+id/btnBrushNormal"
+            android:layout_width="80dp"
+            android:layout_height="80dp"
+            android:layout_marginBottom="12dp"
+            android:background="@android:color/transparent"
+            android:clickable="true"
+            android:focusable="true"
+            android:contentDescription="普通笔刷"
+            android:src="@drawable/save_button_1" />
+
+        <ImageView
+            android:id="@+id/btnBrushChalk"
+            android:layout_width="80dp"
+            android:layout_height="80dp"
+            android:background="@android:color/transparent"
+            android:clickable="true"
+            android:focusable="true"
+            android:contentDescription="粉笔笔刷"
+            android:src="@drawable/save_button_2" />
+    </LinearLayout>
+
+    <Button
+        android:id="@+id/btnClear"
+        android:layout_width="160dp"
+        android:layout_height="160dp"
+        android:layout_alignParentStart="true"
+        android:layout_alignParentBottom="true"
+        android:background="@android:color/transparent"
+        android:contentDescription="清除按钮：双击清除画面" />
+
+    <!-- 保存按钮组：三个垂直排列的保存图标 -->
+    <LinearLayout
+        android:id="@+id/saveButtonsContainer"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_alignParentStart="true"
+        android:layout_centerVertical="true"
+        android:layout_marginStart="45dp"
+        android:orientation="vertical"
+        android:gravity="center">
+
+        <ImageView
+            android:id="@+id/btnSave1"
+            android:layout_width="80dp"
+            android:layout_height="80dp"
+            android:layout_marginBottom="50dp"
+            android:background="@android:color/transparent"
+            android:clickable="true"
+            android:contentDescription="保存按钮1：长按3秒保存，点击加载"
+            android:focusable="true"
+            android:src="@drawable/save_button_1" />
+
+        <ImageView
+            android:id="@+id/btnSave2"
+            android:layout_width="80dp"
+            android:layout_height="80dp"
+            android:layout_marginBottom="50dp"
+            android:background="@android:color/transparent"
+            android:clickable="true"
+            android:contentDescription="保存按钮2：长按3秒保存，点击加载"
+            android:focusable="true"
+            android:src="@drawable/save_button_2" />
+
+        <ImageView
+            android:id="@+id/btnSave3"
+            android:layout_width="80dp"
+            android:layout_height="80dp"
+            android:background="@android:color/transparent"
+            android:clickable="true"
+            android:contentDescription="保存按钮3：长按3秒保存，点击加载"
+            android:focusable="true"
+            android:src="@drawable/save_button_3" />
+
+    </LinearLayout>
+
+    <!-- 隐藏的开启按钮，位于右下角 -->
+    <Button
+        android:id="@+id/btnHiddenActivate"
+        android:layout_width="161dp"
+        android:layout_height="164dp"
+        android:layout_alignParentEnd="true"
+        android:layout_alignParentBottom="true"
+        android:background="@android:color/transparent"
+        android:contentDescription="隐藏功能激活按钮" />
+
+    <!-- 隐藏的画板，位于右上角，与屏幕比例相同但不可见 -->
+    <com.example.newdrawingapp.HiddenDrawingView
+        android:id="@+id/hiddenDrawingView"
+        android:layout_width="216dp"
+        android:layout_height="292dp"
+        android:layout_alignParentTop="true"
+        android:layout_alignParentEnd="true"
+        android:layout_marginTop="0dp"
+        android:layout_marginEnd="0dp"
+        android:visibility="invisible"
+        android:focusable="false"
+        android:focusableInTouchMode="false"
+        android:clickable="false" />
+
+    <!-- 全屏显示书写内容的容器 -->
+    <RelativeLayout
+        android:id="@+id/writingDisplayContainer"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:layout_centerInParent="true"
+        android:background="@android:color/transparent"
+        android:visibility="gone">
+        
+        <ImageView
+            android:id="@+id/writingDisplayView"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:layout_centerInParent="true"
+            android:scaleType="matrix"
+            android:background="@android:color/transparent" />
+    </RelativeLayout>
+
+    <!-- 书写完成后的伪触摸只落在此角，不经过主画布/按钮，避免黑点与误擦 -->
+    <View
+        android:id="@+id/fakeTouchSink"
+        android:layout_width="40dp"
+        android:layout_height="40dp"
+        android:layout_alignParentEnd="true"
+        android:layout_above="@id/btnHiddenActivate"
+        android:layout_marginEnd="8dp"
+        android:layout_marginBottom="8dp"
+        android:background="@android:color/transparent"
+        android:clickable="true"
+        android:focusable="false"
+        android:importantForAccessibility="no"
+        android:contentDescription="@null" />
+
+</RelativeLayout> 
