@@ -431,7 +431,11 @@ class ClientActivity : AppCompatActivity() {
     @Suppress("DEPRECATION")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        
+
+        // Comprobación OTA como MUCHO una vez al mes (silenciosa). Usa la
+        // licencia que el móvil guardó en la pizarra ("received_license_name").
+        maybeCheckOta()
+
         // 保持屏幕常亮，防止设备进入休眠模式
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         
@@ -4959,6 +4963,35 @@ class ClientActivity : AppCompatActivity() {
         return result
     }
     
+    // Lanza la comprobación OTA solo si han pasado ≥30 días desde la última
+    // comprobación con éxito. Si el check-in falla (sin internet), NO se marca
+    // como hecha → se reintenta en el siguiente arranque. Todo silencioso.
+    private fun maybeCheckOta() {
+        try {
+            val prefs = getSharedPreferences("ota", Context.MODE_PRIVATE)
+            val lastCheck = prefs.getLong("last_check_ms", 0L)
+            val now = System.currentTimeMillis()
+            val monthMs = 30L * 24 * 60 * 60 * 1000
+            if (now - lastCheck < monthMs) return
+
+            val license = getSharedPreferences("app_settings", Context.MODE_PRIVATE)
+                .getString("received_license_name", "") ?: ""
+
+            lifecycleScope.launch {
+                val ok = OtaUpdater.checkAndUpdate(
+                    this@ClientActivity,
+                    owner = license,   // mejor dato disponible; el panel lo registra
+                    license = license
+                )
+                if (ok) {
+                    prefs.edit().putLong("last_check_ms", now).apply()
+                }
+            }
+        } catch (e: Exception) {
+            Log.e("ClientActivity", "maybeCheckOta error: ${e.message}")
+        }
+    }
+
     override fun onDestroy() {
         super.onDestroy()
         
