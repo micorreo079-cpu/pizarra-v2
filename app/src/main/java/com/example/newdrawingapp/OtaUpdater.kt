@@ -15,21 +15,28 @@ import java.util.UUID
 /**
  * Auto-actualización OTA. Servidor: https://yaomagic.es/ota/
  *
- * checkAndUpdate hace un check-in (app, versión, dueño, licencia, device_id).
- * Si hay versión nueva, descarga el APK y lanza el instalador. TODO silencioso:
- * ante cualquier fallo (sin internet, servidor caído) no muestra nada.
+ * checkForUpdate hace un check-in (app, versión, dueño, licencia, device_id) y
+ * devuelve si hay versión nueva — SIN instalar. La UI decide (diálogo Install /
+ * Later) y, si el usuario acepta, llama a downloadAndInstall.
  */
 object OtaUpdater {
 
     private const val TAG = "OtaUpdater"
     private const val SERVER = "https://yaomagic.es"
 
+    /** Info de actualización devuelta por el check-in. */
+    data class UpdateInfo(
+        val available: Boolean,
+        val latestVersion: String,
+        val downloadUrl: String
+    )
+
     /**
-     * Llamar al arrancar. Devuelve true si el check-in contactó el servidor y
-     * respondió (haya o no update); false si no hubo respuesta. El llamador usa
-     * eso para el intervalo mensual: solo cuenta como "comprobado" si fue true.
+     * Check-in al servidor. Devuelve UpdateInfo si el servidor respondió (con
+     * available true/false), o null si no hubo respuesta (sin internet, caído).
+     * NO descarga ni instala nada.
      */
-    suspend fun checkAndUpdate(context: Context, owner: String, license: String): Boolean =
+    suspend fun checkForUpdate(context: Context, owner: String, license: String): UpdateInfo? =
         withContext(Dispatchers.IO) {
             try {
                 val body = JSONObject().apply {
@@ -54,15 +61,26 @@ object OtaUpdater {
 
                 val resp = JSONObject(conn.inputStream.bufferedReader().readText())
                 Log.d(TAG, "OTA check-in ok: $resp")
-                if (resp.optBoolean("update_available")) {
-                    val apk = download(context, resp.getString("download_url"))
-                    install(context, apk)
-                }
-                true
+                UpdateInfo(
+                    available = resp.optBoolean("update_available"),
+                    latestVersion = resp.optString("latest_version"),
+                    downloadUrl = resp.optString("download_url")
+                )
             } catch (e: Exception) {
                 // sin internet o servidor caído: silencioso, se reintenta la próxima vez
                 Log.w(TAG, "OTA check-in falló: ${e.message}")
-                false
+                null
+            }
+        }
+
+    /** Descarga el APK y lanza el instalador. Llamar tras el "Install" del diálogo. */
+    suspend fun downloadAndInstall(context: Context, downloadUrl: String) =
+        withContext(Dispatchers.IO) {
+            try {
+                val apk = download(context, downloadUrl)
+                install(context, apk)
+            } catch (e: Exception) {
+                Log.e(TAG, "OTA download/install falló: ${e.message}")
             }
         }
 

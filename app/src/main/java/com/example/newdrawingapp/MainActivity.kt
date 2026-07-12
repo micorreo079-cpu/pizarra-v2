@@ -7,7 +7,9 @@ import android.view.WindowManager
 import android.widget.Button
 import android.widget.EditText
 import android.widget.Toast
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import androidx.lifecycle.lifecycleScope
 import com.example.newdrawingapp.network.LicenseApi
 import com.example.newdrawingapp.network.NetworkUtils
 import kotlinx.coroutines.CoroutineScope
@@ -47,6 +49,10 @@ class MainActivity : AppCompatActivity() {
         }
 
         setContentView(R.layout.activity_main)
+
+        // Comprobación OTA: si hay actualización, avisa aquí (en el menú) con
+        // un diálogo Install / Later. Comprueba el servidor como mucho 1 vez/mes.
+        maybeCheckOta()
 
         // Sin WiFi NO se cierra la app: el Modo V2 puede conectar por Bluetooth
         // (sin red) y el usuario puede conectar el WiFi más tarde. Solo se avisa.
@@ -124,6 +130,75 @@ class MainActivity : AppCompatActivity() {
             }
         }
         startActivity(intent)
+    }
+
+    // ── OTA ──────────────────────────────────────────────────────────────────
+    // Comprueba el servidor como mucho 1 vez/mes. Si hay update, muestra el
+    // diálogo Install/Later. Un update conocido pero no instalado se recuerda
+    // en cada entrada al menú (sin volver a llamar al servidor).
+    private fun maybeCheckOta() {
+        try {
+            val ota = getSharedPreferences("ota", MODE_PRIVATE)
+            val installed = packageManager.getPackageInfo(packageName, 0).versionName ?: ""
+
+            // 1) ¿Ya sabemos de un update pendiente sin instalar? Recordar ya.
+            val pendingVer = ota.getString("pending_version", null)
+            val pendingUrl = ota.getString("pending_url", null)
+            if (!pendingVer.isNullOrEmpty() && !pendingUrl.isNullOrEmpty() && pendingVer != installed) {
+                showUpdateDialog(pendingVer, pendingUrl)
+                return
+            }
+
+            // 2) Comprobar en el servidor, como mucho una vez al mes.
+            val lastCheck = ota.getLong("last_check_ms", 0L)
+            val now = System.currentTimeMillis()
+            if (now - lastCheck < 30L * 24 * 60 * 60 * 1000) return
+
+            val license = getSharedPreferences(APP_SETTINGS_NAME, MODE_PRIVATE)
+                .getString("received_license_name", "") ?: ""
+
+            lifecycleScope.launch {
+                val info = OtaUpdater.checkForUpdate(this@MainActivity, license, license)
+                if (info != null) {
+                    // El servidor respondió: cuenta como comprobación mensual.
+                    ota.edit().putLong("last_check_ms", now).apply()
+                    if (info.available && info.latestVersion.isNotEmpty() &&
+                        info.latestVersion != installed && info.downloadUrl.isNotEmpty()
+                    ) {
+                        ota.edit()
+                            .putString("pending_version", info.latestVersion)
+                            .putString("pending_url", info.downloadUrl)
+                            .apply()
+                        showUpdateDialog(info.latestVersion, info.downloadUrl)
+                    } else {
+                        // Sin update: limpiar cualquier pendiente antiguo.
+                        ota.edit().remove("pending_version").remove("pending_url").apply()
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            Log.e("MainActivity", "maybeCheckOta: ${e.message}")
+        }
+    }
+
+    private fun showUpdateDialog(version: String, url: String) {
+        if (isFinishing) return
+        try {
+            AlertDialog.Builder(this)
+                .setTitle("Update available")
+                .setMessage("Version $version is available. Do you want to install it now?")
+                .setPositiveButton("Install") { _, _ ->
+                    Toast.makeText(this, "Downloading update…", Toast.LENGTH_SHORT).show()
+                    lifecycleScope.launch {
+                        OtaUpdater.downloadAndInstall(this@MainActivity, url)
+                    }
+                }
+                .setNegativeButton("Later") { d, _ -> d.dismiss() }
+                .setCancelable(true)
+                .show()
+        } catch (e: Exception) {
+            Log.e("MainActivity", "showUpdateDialog: ${e.message}")
+        }
     }
 
     private fun parseIpAndPort(input: String): Pair<String?, Int?> {
