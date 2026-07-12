@@ -8,9 +8,14 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import java.io.File
-import java.net.HttpURLConnection
 import java.net.URL
+import java.security.KeyStore
+import java.security.cert.CertificateFactory
 import java.util.UUID
+import javax.net.ssl.HttpsURLConnection
+import javax.net.ssl.SSLContext
+import javax.net.ssl.SSLSocketFactory
+import javax.net.ssl.TrustManagerFactory
 
 /**
  * Auto-actualización OTA. Servidor: https://yaomagic.es/ota/
@@ -23,6 +28,27 @@ object OtaUpdater {
 
     private const val TAG = "OtaUpdater"
     private const val SERVER = "https://yaomagic.es"
+
+    // Android < 7.1 (la DPT-RP1 es 5.1) NO confía en el certificado raíz de
+    // Let's Encrypt → todo HTTPS a yaomagic.es falla con SSLHandshakeException.
+    // Solución: incluir ISRG Root X1 en la app y usar esta factory en el OTA.
+    // Funciona igual en Android moderno, así que se aplica siempre.
+    @Volatile private var otaSocketFactory: SSLSocketFactory? = null
+
+    private fun socketFactory(context: Context): SSLSocketFactory {
+        otaSocketFactory?.let { return it }
+        val cf = CertificateFactory.getInstance("X.509")
+        val ca = context.resources.openRawResource(R.raw.isrg_root_x1)
+            .use { cf.generateCertificate(it) }
+        val ks = KeyStore.getInstance(KeyStore.getDefaultType()).apply {
+            load(null)
+            setCertificateEntry("isrg-root-x1", ca)
+        }
+        val tmf = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm())
+            .apply { init(ks) }
+        val ssl = SSLContext.getInstance("TLSv1.2").apply { init(null, tmf.trustManagers, null) }
+        return ssl.socketFactory.also { otaSocketFactory = it }
+    }
 
     /** Info de actualización devuelta por el check-in. */
     data class UpdateInfo(
@@ -51,7 +77,8 @@ object OtaUpdater {
                     put("license", license)
                 }
 
-                val conn = URL("$SERVER/ota/api/checkin").openConnection() as HttpURLConnection
+                val conn = URL("$SERVER/ota/api/checkin").openConnection() as HttpsURLConnection
+                conn.sslSocketFactory = socketFactory(context)
                 conn.requestMethod = "POST"
                 conn.setRequestProperty("Content-Type", "application/json")
                 conn.connectTimeout = 10_000
@@ -93,7 +120,9 @@ object OtaUpdater {
 
     private fun download(context: Context, path: String): File {
         val file = File(context.cacheDir, "update.apk")
-        URL("$SERVER$path").openStream().use { input ->
+        val conn = URL("$SERVER$path").openConnection() as HttpsURLConnection
+        conn.sslSocketFactory = socketFactory(context)
+        conn.inputStream.use { input ->
             file.outputStream().use { input.copyTo(it) }
         }
         return file
