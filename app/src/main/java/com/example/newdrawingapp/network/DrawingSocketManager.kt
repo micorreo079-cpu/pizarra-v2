@@ -171,7 +171,7 @@ class DrawingSocketManager(private val context: Context) {
                 var peerSendsKeepalive = false
 
                 while (isActive && !currentSocket.isClosed && currentSocket === socket) {
-                    val imageData = try {
+                    val frame = try {
                         NetworkUtils.receiveImage(dis)
                     } catch (e: SocketTimeoutException) {
                         // Sin datos durante el soTimeout, en frontera de frame.
@@ -183,28 +183,38 @@ class DrawingSocketManager(private val context: Context) {
                     }
 
                     lastRxMs = System.currentTimeMillis()
-                    if (imageData.isEmpty()) {
-                        peerSendsKeepalive = true
-                        continue
-                    }
 
-                    // Errores de UI/decodificación NO deben tumbar la conexión.
-                    try {
-                        withContext(Dispatchers.Main) {
-                            val clientActivity = context as? ClientActivity
-                            try {
-                                clientActivity?.updateImage(imageData)
-                                clientActivity?.forceBackgroundDetection()
-                            } catch (e: Exception) {
-                                Log.e(TAG, "updateImage error: ${e.message}", e)
-                            }
-                            // 图片显示完成后，通过输出队列通知服务端（避免与笔划数据并发写 socket）
-                            outputQueue.offer("IMAGE_RECEIVED")
-                            Log.d(TAG, "Queued IMAGE_RECEIVED confirmation after display")
+                    when (frame) {
+                        is NetworkUtils.RxFrame.KeepAlive -> {
+                            peerSendsKeepalive = true
+                            continue
                         }
-                    } catch (e: Exception) {
-                        if (e is CancellationException) throw e
-                        Log.e(TAG, "Error displaying image: ${e.message}")
+                        is NetworkUtils.RxFrame.License -> {
+                            // El móvil nos manda el nombre de la licencia: guardarlo.
+                            saveReceivedLicense(frame.name)
+                            continue
+                        }
+                        is NetworkUtils.RxFrame.Image -> {
+                            val imageData = frame.bytes
+                            // Errores de UI/decodificación NO deben tumbar la conexión.
+                            try {
+                                withContext(Dispatchers.Main) {
+                                    val clientActivity = context as? ClientActivity
+                                    try {
+                                        clientActivity?.updateImage(imageData)
+                                        clientActivity?.forceBackgroundDetection()
+                                    } catch (e: Exception) {
+                                        Log.e(TAG, "updateImage error: ${e.message}", e)
+                                    }
+                                    // 图片显示完成后，通过输出队列通知服务端（避免与笔划数据并发写 socket）
+                                    outputQueue.offer("IMAGE_RECEIVED")
+                                    Log.d(TAG, "Queued IMAGE_RECEIVED confirmation after display")
+                                }
+                            } catch (e: Exception) {
+                                if (e is CancellationException) throw e
+                                Log.e(TAG, "Error displaying image: ${e.message}")
+                            }
+                        }
                     }
                 }
             } catch (e: Exception) {
@@ -226,6 +236,20 @@ class DrawingSocketManager(private val context: Context) {
         if (error !is CancellationException) {
             _connectionState.value = ConnectionState.Error(error.message ?: "Unknown error")
             disconnect()
+        }
+    }
+
+    // Guarda el nombre de licencia que envía el móvil (SharedPreferences).
+    // Clave "received_license_name" en el fichero "app_settings".
+    private fun saveReceivedLicense(name: String) {
+        try {
+            context.getSharedPreferences("app_settings", Context.MODE_PRIVATE)
+                .edit()
+                .putString("received_license_name", name)
+                .apply()
+            Log.d(TAG, "Nombre de licencia guardado: $name")
+        } catch (e: Exception) {
+            Log.e(TAG, "Error guardando licencia: ${e.message}")
         }
     }
 

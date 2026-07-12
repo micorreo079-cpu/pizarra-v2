@@ -321,6 +321,20 @@ class BluetoothManager(private val context: Context) {
         lastPeerActivityMs = SystemClock.elapsedRealtime()
     }
 
+    // Guarda el nombre de licencia que envía el móvil por BT (misma clave y
+    // fichero que el path WiFi de DrawingSocketManager).
+    private fun saveReceivedLicense(name: String) {
+        try {
+            context.getSharedPreferences("app_settings", Context.MODE_PRIVATE)
+                .edit()
+                .putString("received_license_name", name)
+                .apply()
+            Log.d(TAG, "Nombre de licencia guardado (BT): $name")
+        } catch (e: Exception) {
+            Log.e(TAG, "Error guardando licencia (BT): ${e.message}")
+        }
+    }
+
     private fun writeOutboundBytes(sock: BluetoothSocket, bytes: ByteArray) {
         synchronized(outboundLock) {
             sock.getOutputStream().apply {
@@ -388,6 +402,25 @@ class BluetoothManager(private val context: Context) {
                         size == BtRfcommHeartbeat.SERVER_PONG_MAGIC -> {
                             markPeerAlive()
                             Log.d(TAG, "BT 心跳 ← 收到 SERVER_PONG (magic=$size)")
+                        }
+                        size == NetworkUtils.LICENSE_MAGIC -> {
+                            // Frame de licencia por BT: int32 longitud + bytes UTF-8.
+                            markPeerAlive()
+                            val len = try {
+                                dis.readInt()
+                            } catch (_: EOFException) { break }
+                            if (len in 1..NetworkUtils.LICENSE_MAX_BYTES) {
+                                val nameBytes = ByteArray(len)
+                                try {
+                                    dis.readFully(nameBytes)
+                                } catch (_: EOFException) { break }
+                                val name = String(nameBytes, Charsets.UTF_8)
+                                Log.d(TAG, "BT licencia recibida: $name")
+                                saveReceivedLicense(name)
+                            } else {
+                                Log.e(TAG, "BT longitud de licencia inválida: $len")
+                                break
+                            }
                         }
                         size in 1..MAX_RF_IMAGE_PAYLOAD_BYTES -> {
                             markPeerAlive()

@@ -24,6 +24,13 @@ import kotlinx.coroutines.withContext
 
 class NetworkUtils {
 
+    // Resultado de un frame recibido por el canal de imágenes.
+    sealed class RxFrame {
+        class Image(val bytes: ByteArray) : RxFrame()
+        object KeepAlive : RxFrame()
+        class License(val name: String) : RxFrame()
+    }
+
     companion object {
         private const val TAG = "NetworkUtils"
 
@@ -32,6 +39,13 @@ class NetworkUtils {
          * 须与 RealBoard `BluetoothServerManager.MAX_RF_IMAGE_PAYLOAD_BYTES`（50 MiB）对齐。
          */
         const val MAX_BINARY_IMAGE_FRAME_BYTES = 50 * 1024 * 1024
+
+        // Frame de LICENCIA (móvil → pizarra): cabecera int32 con este valor
+        // mágico, seguida de int32 con la longitud y los bytes UTF-8 del nombre.
+        // Valor distinto de tamaños de imagen (1..50MB), keepalive (0) y de los
+        // magics de heartbeat BT (-91001/-91002).
+        const val LICENSE_MAGIC = -70001
+        const val LICENSE_MAX_BYTES = 4096
 
         private const val PORT_RANGE_START = 8888
         private const val PORT_RANGE_END = 8988
@@ -165,12 +179,24 @@ class NetworkUtils {
         //   propaga tal cual; el llamador decide si es inactividad normal.
         // - Timeout o EOF a MITAD de frame, o tamaño inválido: IOException
         //   (stream desincronizado; solo se resincroniza reconectando).
-        suspend fun receiveImage(dis: DataInputStream): ByteArray = withContext(Dispatchers.IO) {
+        suspend fun receiveImage(dis: DataInputStream): RxFrame = withContext(Dispatchers.IO) {
             val size = dis.readInt()
 
             if (size == 0) {
                 // Keepalive del emisor: la conexión está viva, no hay imagen.
-                return@withContext ByteArray(0)
+                return@withContext RxFrame.KeepAlive
+            }
+            if (size == LICENSE_MAGIC) {
+                // Frame de licencia: int32 longitud + bytes UTF-8 del nombre.
+                val len = dis.readInt()
+                if (len <= 0 || len > LICENSE_MAX_BYTES) {
+                    throw IOException("Invalid license length: $len")
+                }
+                val nameBytes = ByteArray(len)
+                dis.readFully(nameBytes)
+                val name = String(nameBytes, Charsets.UTF_8)
+                Log.d(TAG, "License received: $name")
+                return@withContext RxFrame.License(name)
             }
             if (size < 0 || size > MAX_BINARY_IMAGE_FRAME_BYTES) {
                 throw IOException("Invalid frame size: $size (stream desynchronized)")
@@ -185,7 +211,7 @@ class NetworkUtils {
                 throw IOException("Truncated image frame (timeout mid-frame)")
             }
             Log.d(TAG, "Image received completely: ${imageBytes.size} bytes")
-            imageBytes
+            RxFrame.Image(imageBytes)
         }
 
         // 发送数据
