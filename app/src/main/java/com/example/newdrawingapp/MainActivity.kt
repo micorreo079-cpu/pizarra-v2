@@ -247,7 +247,12 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun showUpdateDialog(version: String, url: String) {
-        if (isFinishing) return
+        // SOLO mostrar el aviso si el menú está en primer plano. Nunca debe
+        // salir sobre el canvas (ClientActivity): si el check-in vuelve mientras
+        // el usuario ya entró a dibujar, no se muestra — el update queda
+        // pendiente y se recordará al volver al menú.
+        if (isFinishing || isDestroyed) return
+        if (!lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.RESUMED)) return
         try {
             AlertDialog.Builder(this)
                 .setTitle("Update available")
