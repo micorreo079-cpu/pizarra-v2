@@ -4493,55 +4493,57 @@ class ClientActivity : AppCompatActivity() {
     }
     
     private fun manageBitmapCache(newBitmap: Bitmap) {
+        // MEMORIA: se mantienen SOLO dos bitmaps a la vez:
+        //  - bitmapCache: copia mutable que se muestra y sobre la que se borra.
+        //  - currentBitmap: copia limpia de respaldo para restaurar borrados.
+        // El `newBitmap` (original decodificado) se RECICLA en cuanto se copia:
+        // no se muestra (se muestra bitmapCache) y antes se acumulaba hasta 3×
+        // en una `bitmapQueue` que NADIE leía → 43,5 MB muertos y crashes de
+        // "recycled bitmap". Guarda anti-alias: nunca reciclar un bitmap que
+        // haya quedado aliasado en cache/current por un fallback de OOM.
         try {
-            // 检查内存状态，如果内存紧张则减少缓存数量
-            val memoryUsage = getMemoryUsage()
-            val currentMaxCache = if (memoryUsage > 0.8f) 1 else maxCacheSize
-            
-            // 回收旧的位图
-            while (bitmapQueue.size >= currentMaxCache) {
-                val oldBitmap = bitmapQueue.removeFirst()
-                if (!oldBitmap.isRecycled) {
-                    oldBitmap.recycle()
-                }
-            }
-            
-            // 创建可修改的位图副本用于bitmapCache（用于擦除功能）
-            // 注意：必须创建副本，因为原始位图可能被回收或修改
-            if (bitmapCache?.isRecycled == false) {
-                bitmapCache?.recycle()
-            }
-            try {
-                bitmapCache = newBitmap.copy(Bitmap.Config.ARGB_8888, true)
+            val oldCache = bitmapCache
+            val oldCurrent = currentBitmap
+
+            var cacheAliasesNew = false
+            val newCache: Bitmap = try {
+                newBitmap.copy(Bitmap.Config.ARGB_8888, true)
             } catch (e: OutOfMemoryError) {
-                Log.e("ClientActivity", "创建bitmapCache副本时内存不足，使用原始位图: ${e.message}")
-                bitmapCache = newBitmap
+                Log.e("ClientActivity", "OOM copiando bitmapCache, uso el original: ${e.message}")
+                cacheAliasesNew = true
+                newBitmap
             }
-            
-            // 同时更新currentBitmap，确保擦除功能可以从currentBitmap恢复
-            currentBitmap?.recycle()
-            try {
-                currentBitmap = newBitmap.copy(Bitmap.Config.ARGB_8888, true)
+
+            var currentAliasesNew = false
+            val newCurrent: Bitmap = try {
+                newBitmap.copy(Bitmap.Config.ARGB_8888, true)
             } catch (e: OutOfMemoryError) {
-                Log.e("ClientActivity", "创建currentBitmap副本时内存不足，使用原始位图: ${e.message}")
-                currentBitmap = newBitmap
+                Log.e("ClientActivity", "OOM copiando currentBitmap, uso el original: ${e.message}")
+                currentAliasesNew = true
+                newBitmap
             }
-            
-            // 将原始位图添加到队列（用于历史记录）
-            bitmapQueue.addLast(newBitmap)
-            
-            if (memoryUsage > 0.8f) {
-                Log.d("ClientActivity", "内存紧张，减少位图缓存数量到: $currentMaxCache")
+
+            bitmapCache = newCache
+            currentBitmap = newCurrent
+
+            // Reciclar los anteriores (nunca los recién asignados).
+            if (oldCache != null && oldCache !== newCache && oldCache !== newCurrent && !oldCache.isRecycled) {
+                oldCache.recycle()
             }
-            
-            Log.d("ClientActivity", "位图缓存已更新，bitmapCache和currentBitmap已同步")
+            if (oldCurrent != null && oldCurrent !== newCache && oldCurrent !== newCurrent &&
+                oldCurrent !== oldCache && !oldCurrent.isRecycled) {
+                oldCurrent.recycle()
+            }
+
+            // El original ya no se necesita (salvo que sea el propio fallback).
+            if (!cacheAliasesNew && !currentAliasesNew && !newBitmap.isRecycled) {
+                newBitmap.recycle()
+            }
         } catch (e: Exception) {
             Log.e("ClientActivity", "Error managing bitmap cache: ${e.message}", e)
-            // 如果创建副本失败，至少尝试直接赋值（作为后备方案）
             if (bitmapCache == null) {
                 bitmapCache = newBitmap
                 currentBitmap = newBitmap
-                Log.w("ClientActivity", "位图缓存创建副本失败，使用原始位图（可能导致擦除功能异常）")
             }
         }
     }

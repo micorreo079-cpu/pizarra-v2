@@ -38,7 +38,11 @@ class NetworkUtils {
          * 单帧二进制图片载荷上限（字节）；与服务端 TCP / RFCOMM `DataOutputStream.writeInt(N)` + N 字节一致。
          * 须与 RealBoard `BluetoothServerManager.MAX_RF_IMAGE_PAYLOAD_BYTES`（50 MiB）对齐。
          */
-        const val MAX_BINARY_IMAGE_FRAME_BYTES = 50 * 1024 * 1024
+        // Tope de un frame de imagen COMPRIMIDO (PNG/JPEG). Un canvas 1650x2200
+        // real nunca pasa de ~10 MB; 20 MB da margen y evita que un tamaño
+        // basura por desincronización reserve un array gigante que reviente el
+        // heap del e-ink (antes 50 MB). El emisor jamás manda imágenes tan grandes.
+        const val MAX_BINARY_IMAGE_FRAME_BYTES = 20 * 1024 * 1024
 
         // Frame de LICENCIA (móvil → pizarra): cabecera int32 con este valor
         // mágico, seguida de int32 con la longitud y los bytes UTF-8 del nombre.
@@ -203,7 +207,13 @@ class NetworkUtils {
             }
 
             Log.d(TAG, "Receiving image of size: $size bytes")
-            val imageBytes = ByteArray(size)
+            val imageBytes = try {
+                ByteArray(size)
+            } catch (e: OutOfMemoryError) {
+                // Sin memoria para el array: convertir en IOException para que el
+                // llamador desconecte y reconecte, en vez de crashear la app.
+                throw IOException("Out of memory for image frame ($size bytes)")
+            }
             try {
                 dis.readFully(imageBytes)
             } catch (e: SocketTimeoutException) {

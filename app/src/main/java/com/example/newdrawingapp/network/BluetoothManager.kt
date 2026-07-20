@@ -424,7 +424,12 @@ class BluetoothManager(private val context: Context) {
                         }
                         size in 1..MAX_RF_IMAGE_PAYLOAD_BYTES -> {
                             markPeerAlive()
-                            val data = ByteArray(size)
+                            val data = try {
+                                ByteArray(size)
+                            } catch (e: OutOfMemoryError) {
+                                Log.e(TAG, "BT sin memoria para frame de $size bytes, cerrando sesión")
+                                break
+                            }
                             try {
                                 dis.readFully(data)
                             } catch (_: EOFException) {
@@ -432,13 +437,17 @@ class BluetoothManager(private val context: Context) {
                                 break
                             }
 
-                            launch {
-                                imageProcessMutex.withLock {
-                                    if (sessionSocket !== sock || !sock.isConnected) return@withLock
-                                    withContext(Dispatchers.Main) {
-                                        onImageReceived?.invoke(data)
-                                    }
-                                    if (sessionSocket !== sock || !sock.isConnected) return@withLock
+                            // Procesar EN LÍNEA (sin `launch`): así el bucle NO lee
+                            // el frame siguiente hasta mostrar y confirmar el
+                            // actual → backpressure natural. Antes, en una ráfaga,
+                            // se acumulaban varios byte arrays de imagen a la vez
+                            // (riesgo de OOM en el e-ink). El emisor se frena solo
+                            // al llenarse el buffer del socket.
+                            if (sessionSocket === sock && sock.isConnected) {
+                                withContext(Dispatchers.Main) {
+                                    onImageReceived?.invoke(data)
+                                }
+                                if (sessionSocket === sock && sock.isConnected) {
                                     try {
                                         writeOutboundBytes(sock, ACK_IMAGE_RECEIVED_BYTES)
                                         markPeerAlive()
