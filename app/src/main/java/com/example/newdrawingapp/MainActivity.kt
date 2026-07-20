@@ -139,25 +139,46 @@ class MainActivity : AppCompatActivity() {
     }
 
     // ── OTA ──────────────────────────────────────────────────────────────────
-    // Comprueba el servidor como mucho 1 vez/mes. Si hay update, muestra el
-    // diálogo Install/Later. Un update conocido pero no instalado se recuerda
-    // en cada entrada al menú (sin volver a llamar al servidor).
+    // ANTI-BUCLE:
+    // - Solo cuenta como update una versión ESTRICTAMENTE más nueva que la
+    //   instalada (comparación de strings; nuestras versiones son fechas
+    //   "1.yyyy.MM.dd.HHmm", así que el orden alfabético = orden cronológico).
+    //   Si el panel tiene un APK más viejo que el instalado, NO se avisa ni se
+    //   descarga nada (antes: "distinto" = update → bucle de reintentos).
+    // - "Later" silencia el recordatorio 24 h (antes re-preguntaba en cada
+    //   entrada al menú).
+    // - La descarga solo ocurre al pulsar Install, nunca sola.
+    private fun isNewerVersion(latest: String, installed: String): Boolean {
+        if (latest.isEmpty()) return false
+        return latest > installed
+    }
+
+    // Comprueba el servidor como mucho 1 vez/mes. Un update conocido pero no
+    // instalado se recuerda (respetando el silencio de 24 h de "Later").
     private fun maybeCheckOta() {
         try {
             val ota = getSharedPreferences("ota", MODE_PRIVATE)
             val installed = packageManager.getPackageInfo(packageName, 0).versionName ?: ""
+            val now = System.currentTimeMillis()
 
-            // 1) ¿Ya sabemos de un update pendiente sin instalar? Recordar ya.
+            // 1) ¿Update pendiente sin instalar? Recordar, salvo silencio activo.
             val pendingVer = ota.getString("pending_version", null)
             val pendingUrl = ota.getString("pending_url", null)
-            if (!pendingVer.isNullOrEmpty() && !pendingUrl.isNullOrEmpty() && pendingVer != installed) {
-                showUpdateDialog(pendingVer, pendingUrl)
-                return
+            if (!pendingVer.isNullOrEmpty() && !pendingUrl.isNullOrEmpty()) {
+                if (isNewerVersion(pendingVer, installed)) {
+                    val snoozeUntil = ota.getLong("snooze_until_ms", 0L)
+                    if (now >= snoozeUntil) {
+                        showUpdateDialog(pendingVer, pendingUrl)
+                    }
+                    return
+                } else {
+                    // Ya instalado (o el pendiente no es más nuevo): limpiar.
+                    ota.edit().remove("pending_version").remove("pending_url").apply()
+                }
             }
 
             // 2) Comprobar en el servidor, como mucho una vez al mes.
             val lastCheck = ota.getLong("last_check_ms", 0L)
-            val now = System.currentTimeMillis()
             if (now - lastCheck < 30L * 24 * 60 * 60 * 1000) return
 
             val license = getSharedPreferences(APP_SETTINGS_NAME, MODE_PRIVATE)
@@ -168,8 +189,8 @@ class MainActivity : AppCompatActivity() {
                 if (info != null) {
                     // El servidor respondió: cuenta como comprobación mensual.
                     ota.edit().putLong("last_check_ms", now).apply()
-                    if (info.available && info.latestVersion.isNotEmpty() &&
-                        info.latestVersion != installed && info.downloadUrl.isNotEmpty()
+                    if (info.available && info.downloadUrl.isNotEmpty() &&
+                        isNewerVersion(info.latestVersion, installed)
                     ) {
                         ota.edit()
                             .putString("pending_version", info.latestVersion)
@@ -177,7 +198,7 @@ class MainActivity : AppCompatActivity() {
                             .apply()
                         showUpdateDialog(info.latestVersion, info.downloadUrl)
                     } else {
-                        // Sin update: limpiar cualquier pendiente antiguo.
+                        // Sin update real: limpiar cualquier pendiente antiguo.
                         ota.edit().remove("pending_version").remove("pending_url").apply()
                     }
                 }
@@ -206,8 +227,8 @@ class MainActivity : AppCompatActivity() {
             }
             // El servidor respondió: cuenta también como comprobación mensual.
             ota.edit().putLong("last_check_ms", System.currentTimeMillis()).apply()
-            if (info.available && info.latestVersion.isNotEmpty() &&
-                info.latestVersion != installed && info.downloadUrl.isNotEmpty()
+            if (info.available && info.downloadUrl.isNotEmpty() &&
+                isNewerVersion(info.latestVersion, installed)
             ) {
                 ota.edit()
                     .putString("pending_version", info.latestVersion)
@@ -237,7 +258,14 @@ class MainActivity : AppCompatActivity() {
                         OtaUpdater.downloadAndInstall(this@MainActivity, url)
                     }
                 }
-                .setNegativeButton("Later") { d, _ -> d.dismiss() }
+                .setNegativeButton("Later") { d, _ ->
+                    // Silenciar el recordatorio 24 h (anti-pesadez).
+                    getSharedPreferences("ota", MODE_PRIVATE).edit()
+                        .putLong("snooze_until_ms",
+                            System.currentTimeMillis() + 24L * 60 * 60 * 1000)
+                        .apply()
+                    d.dismiss()
+                }
                 .setCancelable(true)
                 .show()
         } catch (e: Exception) {
