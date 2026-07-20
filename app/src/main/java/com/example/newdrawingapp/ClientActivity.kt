@@ -4131,10 +4131,13 @@ class ClientActivity : AppCompatActivity() {
         val dx = endX - startX
         val dy = endY - startY
         val distance = Math.sqrt((dx * dx + dy * dy).toDouble()).toFloat()
-        // 优化：减少插值步骤，使用更大的步长，避免过多绘制调用
-        val stepSize = eraserRadius * 0.6f  // 增大步长，减少步骤数
-        val steps = (distance / stepSize).toInt().coerceAtLeast(1).coerceAtMost(20)  // 限制最大步骤数
-        
+        // Paso PEQUEÑO (0.25·radio) para que los círculos se solapen y el
+        // borrado quede como un trazo continuo, no círculos sueltos. Tope alto
+        // (120) para que ni un arrastre rápido deje huecos. Dibujar en el bitmap
+        // es barato; el refresco del e-ink va aparte (throttle de 16 ms).
+        val stepSize = (eraserRadius * 0.25f).coerceAtLeast(2f)
+        val steps = (distance / stepSize).toInt().coerceAtLeast(1).coerceAtMost(120)
+
         for (i in 0..steps) {
             val t = i.toFloat() / steps
             val x = startX + dx * t
@@ -4320,12 +4323,21 @@ class ClientActivity : AppCompatActivity() {
                     val (bitmapX, bitmapY, scale) = coords
                     if (bitmapX !in 0f..bitmap.width.toFloat() || bitmapY !in 0f..bitmap.height.toFloat()) return@let
                     
-                    // 避免每次擦除都复制位图，直接使用可变位图
-                    if (writingDisplayBitmap == null || 
-                        writingDisplayBitmap!!.width != bitmap.width || 
-                        writingDisplayBitmap!!.height != bitmap.height) {
-                        writingDisplayBitmap?.recycle()
-                        
+                    // La superficie de borrado (writingDisplayBitmap) tiene que
+                    // ser SIEMPRE el bitmap que se muestra AHORA. Antes solo se
+                    // refrescaba si cambiaba el TAMAÑO; pero al escribir otra
+                    // cifra se crea un bitmap NUEVO del mismo tamaño (pantalla
+                    // completa), así que se seguía borrando sobre el viejo
+                    // (invisible) → "a veces no borra". Ahora se refresca cuando
+                    // el bitmap mostrado es OTRO objeto distinto.
+                    if (writingDisplayBitmap !== bitmap) {
+                        // No reciclar el mostrado (bitmap); solo el copia-propia
+                        // anterior si la teníamos (no === al mostrado).
+                        val prev = writingDisplayBitmap
+                        if (prev != null && prev !== bitmap && !prev.isRecycled) {
+                            try { prev.recycle() } catch (_: Exception) {}
+                        }
+
                         // 如果 bitmap 本身就是可变的，直接使用，无需 copy（避免高内存时OOM）
                         if (bitmap.isMutable) {
                             writingDisplayBitmap = bitmap
@@ -4395,10 +4407,10 @@ class ClientActivity : AppCompatActivity() {
         val dx = endX - startX
         val dy = endY - startY
         val distance = Math.sqrt((dx * dx + dy * dy).toDouble()).toFloat()
-        // 优化：减少插值步骤，使用更大的步长
-        val stepSize = eraserRadius * 0.6f  // 增大步长，减少步骤数
-        val steps = (distance / stepSize).toInt().coerceAtLeast(1).coerceAtMost(20)  // 限制最大步骤数
-        
+        // Igual que interpolateErase: paso pequeño + tope alto → trazo continuo.
+        val stepSize = (eraserRadius * 0.25f).coerceAtLeast(2f)
+        val steps = (distance / stepSize).toInt().coerceAtLeast(1).coerceAtMost(120)
+
         for (i in 0..steps) {
             val t = i.toFloat() / steps
             val x = startX + dx * t
