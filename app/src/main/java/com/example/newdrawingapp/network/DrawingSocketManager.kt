@@ -479,9 +479,33 @@ class DrawingSocketManager(private val context: Context) {
         }
     }
     
+    // La IP objetivo debe estar en la subred (/24) de algún interfaz local con
+    // IPv4. Si no, la conexión saldría por la ruta por defecto (datos móviles
+    // del hotspot) y un proxy del operador puede "aceptarla" → conectado falso
+    // a una IP de una red anterior, sin llegar nunca al descubrimiento.
+    private fun isOnLocalSubnet(ip: String): Boolean {
+        return try {
+            val target = ip.split(".")
+            if (target.size != 4) return false
+            java.net.NetworkInterface.getNetworkInterfaces().toList().any { ni ->
+                ni.isUp && ni.inetAddresses.toList().any { addr ->
+                    addr is java.net.Inet4Address && !addr.isLoopbackAddress &&
+                        addr.hostAddress?.split(".")?.take(3) == target.take(3)
+                }
+            }
+        } catch (e: Exception) {
+            true // ante la duda, no bloquear el intento
+        }
+    }
+
     // 快速连接指定IP和端口
     suspend fun tryQuickConnect(ip: String, port: Int): Boolean {
         return withContext(Dispatchers.IO) {
+            if (!isOnLocalSubnet(ip)) {
+                Log.d(TAG, "快速连接 descartada: $ip no está en la red actual")
+                _connectionState.value = ConnectionState.Disconnected
+                return@withContext false
+            }
             try {
                 _connectionState.value = ConnectionState.Connecting
                 Log.d(TAG, "尝试快速连接: $ip:$port")
