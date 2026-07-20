@@ -3,16 +3,25 @@ plugins {
     id 'org.jetbrains.kotlin.android'
 }
 
+// ── Versión AUTOMÁTICA por compilación (para el OTA) ─────────────────────────
+// Cada build genera una versión nueva sin tocar nada a mano:
+// - otaVersionCode: segundos desde epoch (siempre crece; Android lo usa para
+//   aceptar la actualización). Válido hasta ~2036 (límite de versionCode).
+// - otaVersionName: fecha y hora legibles, p.ej. "1.2026.07.13.0145". El
+//   servidor OTA compara este string: dos builds distintos nunca coinciden.
+def otaVersionCode = (int) (new Date().getTime() / 1000L)
+def otaVersionName = "1." + new Date().format("yyyy.MM.dd.HHmm")
+
 android {
     namespace 'com.example.newdrawingapp'
     compileSdk 34
-    
+
     defaultConfig {
         applicationId "com.example.newdrawingapp"
         minSdkVersion 22
         targetSdkVersion 33
-        versionCode 1
-        versionName "1.0"
+        versionCode otaVersionCode
+        versionName otaVersionName
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
 
