@@ -119,9 +119,20 @@ object OtaUpdater {
     }
 
     private fun download(context: Context, path: String): File {
-        val file = File(context.cacheDir, "update.apk")
+        // Android < 7 (la DPT-RP1 es 5.1): el instalador del sistema no puede
+        // leer content:// ni la caché privada de la app → descargar a la caché
+        // EXTERNA (legible por el instalador con file://). En Android 7+ se usa
+        // la caché privada + FileProvider como siempre.
+        val dir = if (android.os.Build.VERSION.SDK_INT < 24) {
+            context.externalCacheDir ?: context.cacheDir
+        } else {
+            context.cacheDir
+        }
+        val file = File(dir, "update.apk")
         val conn = URL("$SERVER$path").openConnection() as HttpsURLConnection
         conn.sslSocketFactory = socketFactory(context)
+        conn.connectTimeout = 15_000
+        conn.readTimeout = 60_000
         conn.inputStream.use { input ->
             file.outputStream().use { input.copyTo(it) }
         }
@@ -129,12 +140,23 @@ object OtaUpdater {
     }
 
     private fun install(context: Context, apk: File) {
-        val uri = FileProvider.getUriForFile(
-            context, "${context.packageName}.fileprovider", apk
-        )
         val intent = Intent(Intent.ACTION_VIEW).apply {
-            setDataAndType(uri, "application/vnd.android.package-archive")
-            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
+            if (android.os.Build.VERSION.SDK_INT >= 24) {
+                // Android 7+: content:// vía FileProvider (obligatorio desde N).
+                val uri = FileProvider.getUriForFile(
+                    context, "${context.packageName}.fileprovider", apk
+                )
+                setDataAndType(uri, "application/vnd.android.package-archive")
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            } else {
+                // Android < 7: el instalador solo entiende file:// clásico.
+                apk.setReadable(true, false)
+                setDataAndType(
+                    android.net.Uri.fromFile(apk),
+                    "application/vnd.android.package-archive"
+                )
+            }
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         }
         context.startActivity(intent)
     }
