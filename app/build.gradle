@@ -40,8 +40,24 @@ android {
         }
     }
 
+    // ── Clave de firma OFICIAL (app/realboard-release.keystore) ─────────────
+    // Es la MISMA clave con la que se firmaron las pizarras ya entregadas
+    // (huella SHA256 EA:D5:79...): cualquier build firmada con ella actualiza
+    // encima sin desinstalar. NO regenerar ni sustituir NUNCA este fichero:
+    // una clave distinta obligaría a desinstalar la app en todas las pizarras.
+    // Copia de seguridad en Documents/desarrollo/PIZARRA/keystore/.
+    signingConfigs {
+        realboard {
+            storeFile file("realboard-release.keystore")
+            storePassword "android"
+            keyAlias "androiddebugkey"
+            keyPassword "android"
+        }
+    }
+
     buildTypes {
         debug {
+            signingConfig signingConfigs.realboard
             minifyEnabled false
             shrinkResources false
             debuggable true
@@ -57,7 +73,7 @@ android {
             renderscriptDebuggable true
             zipAlignEnabled true
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
-            signingConfig signingConfigs.debug
+            signingConfig signingConfigs.realboard
         }
     }
     compileOptions {
