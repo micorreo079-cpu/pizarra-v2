@@ -1,59 +1,66 @@
-# Add project specific ProGuard rules here.
-# You can control the set of applied configuration files using the
-# proguardFiles setting in build.gradle.
+# Reglas de ofuscación (R8).
 #
-# For more details, see
-#   http://developer.android.com/guide/developing/tools/proguard.html
+# Objetivo: que al descompilar la app no se lea como el código original, para
+# que localizar la comprobación de licencia cueste trabajo. Se ofusca y se
+# optimiza, pero hay cosas que NO se pueden tocar o la pizarra deja de
+# funcionar:
+#
+#  1. Los métodos nativos (JNI): la librería en C los busca por el nombre EXACTO
+#     de la clase y del método (Java_com_example_newdrawingapp_Activation_...).
+#     Si R8 los renombra se rompe el enlace: fallaría la activación y, peor aún,
+#     se perdería el refresco rápido de la tinta de la Sony.
+#  2. Las clases que declaran esos métodos nativos.
+#  3. Los componentes del manifest, que Android crea por su nombre.
+#
+# Las clases de Android que se usan por reflexión (ImageView.invalidate de Sony,
+# createRfcommSocket) son del sistema: R8 no las renombra, no hace falta regla.
 
-# Keep everything - no obfuscation, no optimization
--dontoptimize
--dontobfuscate
--dontshrink
--dontpreverify
-
-# Keep all classes and their members
--keep class ** { *; }
-
-# Keep all annotations
--keepattributes *Annotation*
-
-# Preserve line number information for debugging stack traces
--keepattributes SourceFile,LineNumberTable
-
-# Keep all native methods
+# --- 1 y 2: JNI intacto ---
 -keepclasseswithmembernames class * {
     native <methods>;
 }
+# Se conserva el nombre de la clase y el de sus métodos NATIVOS (los busca el
+# código en C), pero el resto de miembros SÍ se renombra: así no quedan a la
+# vista nombres como isActivated o tryActivate señalando dónde está la
+# comprobación de licencia.
+-keepclasseswithmembernames class com.example.newdrawingapp.Activation {
+    native <methods>;
+}
+-keepclasseswithmembernames class com.example.newdrawingapp.SonySystemUtil {
+    native <methods>;
+}
+-keepclasseswithmembernames class com.example.newdrawingapp.SonySystemUtil$* {
+    native <methods>;
+}
 
-# Keep all enum values
+# --- 3: componentes declarados en el manifest ---
+-keep class com.example.newdrawingapp.SplashActivity
+-keep class com.example.newdrawingapp.MainActivity
+-keep class com.example.newdrawingapp.ClientActivity
+-keep class com.example.newdrawingapp.ActivationActivity
+-keep class com.example.newdrawingapp.PasswordActivity
+-keep class com.example.newdrawingapp.SerialVerifyActivity
+-keep class com.example.newdrawingapp.BootReceiver
+
+# --- Enums (values/valueOf se resuelven por reflexión) ---
 -keepclassmembers enum * {
     public static **[] values();
     public static ** valueOf(java.lang.String);
 }
 
-# Keep Parcelable implementations
--keep class * implements android.os.Parcelable {
-    public static final android.os.Parcelable$Creator *;
+# --- Vistas personalizadas infladas desde XML ---
+-keep public class * extends android.view.View {
+    public <init>(android.content.Context);
+    public <init>(android.content.Context, android.util.AttributeSet);
+    public <init>(android.content.Context, android.util.AttributeSet, int);
 }
 
-# Keep Serializable classes
--keepnames class * implements java.io.Serializable
--keepclassmembers class * implements java.io.Serializable {
-    static final long serialVersionUID;
-    private static final java.io.ObjectStreamField[] serialPersistentFields;
-    !static !transient <fields>;
-    private void writeObject(java.io.ObjectOutputStream);
-    private void readObject(java.io.ObjectInputStream);
-    java.lang.Object writeReplace();
-    java.lang.Object readResolve();
+# --- Parcelables ---
+-keepclassmembers class * implements android.os.Parcelable {
+    public static final ** CREATOR;
 }
 
-# Keep all drawing app specific classes
--keep class com.example.newdrawingapp.** { *; }
-
-# Keep all Kotlin metadata
--keepattributes *Annotation*, InnerClasses
--dontnote kotlinx.serialization.AnnotationsKt
-
-# Keep all reflection usage
--keepattributes Signature, Exception, *Annotation*, InnerClasses, EnclosingMethod
+# Sin nombres de fichero ni números de línea: información de más para quien
+# descompile. (Para depurar una release, volver a poner
+# -keepattributes SourceFile,LineNumberTable.)
+-renamesourcefileattribute SourceFile

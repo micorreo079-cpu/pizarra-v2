@@ -34,10 +34,14 @@ class SplashActivity : AppCompatActivity() {
             // 需要序列号验证
             android.util.Log.d("SplashActivity", "跳转到: SerialVerifyActivity")
             SerialVerifyActivity::class.java
+        } else if (!Activation.isActivated(this)) {
+            // Sin activar: pantalla de código/clave (sustituye a la contraseña
+            // compartida, que valía en todas las pizarras).
+            android.util.Log.d("SplashActivity", "跳转到: ActivationActivity")
+            ActivationActivity::class.java
         } else {
-            // 不需要序列号验证，直接进入密码页面
-            android.util.Log.d("SplashActivity", "跳转到: PasswordActivity")
-            PasswordActivity::class.java
+            android.util.Log.d("SplashActivity", "跳转到: MainActivity")
+            MainActivity::class.java
         }
         
         val intent = Intent(this, targetActivity)

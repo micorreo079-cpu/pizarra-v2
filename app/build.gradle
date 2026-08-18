@@ -66,11 +66,17 @@ android {
             zipAlignEnabled true
         }
         release {
-            minifyEnabled false
-            shrinkResources false
-            debuggable true
-            jniDebuggable true
-            renderscriptDebuggable true
+            // Ofuscación activada: el código descompilado sale ilegible. Las
+            // partes que no se pueden tocar (JNI de Sony y de la activación,
+            // componentes del manifest) están protegidas en proguard-rules.pro.
+            minifyEnabled true
+            shrinkResources true
+            // OJO: con debuggable=true R8 NO ofusca (solo encoge). Para que el
+            // renombrado se aplique de verdad, la release no puede ser
+            // depurable. El logcat sigue funcionando igual.
+            debuggable false
+            jniDebuggable false
+            renderscriptDebuggable false
             zipAlignEnabled true
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
             signingConfig signingConfigs.realboard

@@ -806,11 +806,15 @@ class ClientActivity : AppCompatActivity() {
         if (intent.getBooleanExtra("SERVER_MODE", false)) {
             // Modo V2: la pizarra hace de SERVIDOR de red (escucha y acepta).
             isServerMode = true
+            // Recordar el modo: al encender la pizarra se arranca en el último
+            // que se usó (ver BootReceiver).
+            saveLastMode(true)
             addV2TapZone() // zona oculta arriba-derecha: 3 toques → QR
             drawingSocketManager.startAsServer()
             bluetoothManager.startAsServer() // BT directo: el móvil conecta por la MAC del QR
             bluetoothManager.ensureSearching() // y además barrido auto (emparejados), como en V1
         } else {
+            saveLastMode(false) // modo V1 usado: se recordará al encender
             val manualIp = intent.getStringExtra("MANUAL_IP")
             if (manualIp != null) {
                 // 使用手动输入的IP
@@ -4573,6 +4577,18 @@ class ClientActivity : AppCompatActivity() {
     // así no se dispara a la vez el triple toque de reconexión de V1).
     // Modo V1: la zona DEJA PASAR los toques a los botones de debajo, con lo
     // que el triple toque (reconectar) y los combos de cierre siguen intactos.
+    /** Guarda el modo en uso para que el arranque al encender lo repita. */
+    private fun saveLastMode(serverMode: Boolean) {
+        try {
+            getSharedPreferences(BootPrefs.PREFS, MODE_PRIVATE)
+                .edit()
+                .putBoolean(BootPrefs.KEY_LAST_MODE_V2, serverMode)
+                .apply()
+        } catch (e: Exception) {
+            Log.w("ClientActivity", "No se pudo guardar el último modo: ${e.message}")
+        }
+    }
+
     private fun addV2TapZone() {
         if (v2TapZoneAdded) return
         v2TapZoneAdded = true
