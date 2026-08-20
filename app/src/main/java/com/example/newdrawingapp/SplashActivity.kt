@@ -15,7 +15,10 @@ class SplashActivity : AppCompatActivity() {
     
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        
+
+        // Candado de versión: en Android > 6 la app no funciona.
+        if (DeviceGate.enforce(this)) return
+
         // 保持屏幕常亮
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         

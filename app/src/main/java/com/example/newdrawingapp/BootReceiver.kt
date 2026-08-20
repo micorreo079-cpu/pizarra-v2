@@ -12,6 +12,11 @@ class BootReceiver : BroadcastReceiver() {
         if (intent.action == Intent.ACTION_BOOT_COMPLETED ||
             intent.action == "android.intent.action.QUICKBOOT_POWERON" ||
             intent.action == "com.htc.intent.action.QUICKBOOT_POWERON") {
+            // Candado de versión: en Android > 6 la app no arranca sola.
+            if (!DeviceGate.isSupported()) {
+                Log.d("BootReceiver", "Android no soportado (>6): no se autoarranca")
+                return
+            }
             // Sin activar todavía: al encender se abre la pantalla de
             // activación (no tiene sentido entrar a dibujar).
             if (!Activation.isActivated(context)) {

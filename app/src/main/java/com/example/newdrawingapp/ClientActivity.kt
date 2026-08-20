@@ -432,6 +432,9 @@ class ClientActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
+        // Candado de versión: en Android > 6 la app no funciona.
+        if (DeviceGate.enforce(this)) return
+
         // 保持屏幕常亮，防止设备进入休眠模式
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         

@@ -22,6 +22,10 @@ class ActivationActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        // Candado de versión: en Android > 6 la app no funciona.
+        if (DeviceGate.enforce(this)) return
+
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
 
         // Ya activada: directo a la app.
