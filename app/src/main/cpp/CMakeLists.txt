@@ -5,3 +5,7 @@ add_library(sony_dhw SHARED sony_dhw.cpp)
 
 find_library(log-lib log)
 target_link_libraries(sony_dhw dl ${log-lib})
+
+# Activación: código del aparato y comprobación de la clave (secreto incluido).
+add_library(rbact SHARED activation.cpp)
+target_link_libraries(rbact ${log-lib})

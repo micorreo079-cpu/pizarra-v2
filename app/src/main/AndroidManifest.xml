@@ -42,9 +42,15 @@
             android:exported="false"
             android:screenOrientation="portrait" />
 
-        <!-- 密码验证页面 -->
+        <!-- 密码验证页面 (sustituida por ActivationActivity; se conserva) -->
         <activity
             android:name=".PasswordActivity"
+            android:exported="false"
+            android:screenOrientation="portrait" />
+
+        <!-- Activación por código de aparato + clave -->
+        <activity
+            android:name=".ActivationActivity"
             android:exported="false"
             android:screenOrientation="portrait" />
 

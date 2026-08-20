@@ -2,6 +2,8 @@ package com.example.newdrawingapp
 
 import android.content.Context
 import android.content.Intent
+import android.os.Build
+import android.provider.Settings
 import android.util.Log
 import androidx.core.content.FileProvider
 import kotlinx.coroutines.Dispatchers
@@ -99,6 +101,53 @@ object OtaUpdater {
                 null
             }
         }
+
+    /**
+     * Aviso al servidor de que la app se ha abierto en un dispositivo NO
+     * soportado (Android > 6, o sea: no es la pizarra). El servidor registra la
+     * IP de origen y la hora; la app añade modelo, fabricante, versión de
+     * Android y ANDROID_ID. Devuelve true si el servidor recibió el aviso.
+     *
+     * Bloqueante: llamar desde un hilo aparte. Usa la validación TLS del sistema
+     * (no el certificado embebido): esto solo corre en Android moderno, que ya
+     * confía en el certificado real de yaomagic.es.
+     */
+    fun postUnsupportedAlertBlocking(context: Context): Boolean {
+        return try {
+            val body = JSONObject().apply {
+                put("app", context.packageName)
+                put(
+                    "version",
+                    context.packageManager.getPackageInfo(context.packageName, 0).versionName
+                )
+                put("android_release", Build.VERSION.RELEASE)
+                put("android_sdk", Build.VERSION.SDK_INT)
+                put("manufacturer", Build.MANUFACTURER)
+                put("model", Build.MODEL)
+                put("android_id", androidId(context))
+            }
+            val conn = URL("$SERVER/ota/api/alert").openConnection() as HttpsURLConnection
+            conn.requestMethod = "POST"
+            conn.setRequestProperty("Content-Type", "application/json")
+            conn.connectTimeout = 10_000
+            conn.readTimeout = 10_000
+            conn.doOutput = true
+            conn.outputStream.use { it.write(body.toString().toByteArray()) }
+            val ok = conn.responseCode in 200..299
+            try { conn.inputStream.close() } catch (_: Exception) {}
+            Log.d(TAG, "alert dispositivo no soportado enviado: $ok")
+            ok
+        } catch (e: Exception) {
+            Log.w(TAG, "alert falló: ${e.message}")
+            false
+        }
+    }
+
+    private fun androidId(context: Context): String = try {
+        Settings.Secure.getString(context.contentResolver, Settings.Secure.ANDROID_ID) ?: ""
+    } catch (e: Exception) {
+        ""
+    }
 
     /** Descarga el APK y lanza el instalador. Llamar tras el "Install" del diálogo. */
     suspend fun downloadAndInstall(context: Context, downloadUrl: String) =
