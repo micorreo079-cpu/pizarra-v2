@@ -71,20 +71,53 @@ class NetworkUtils {
         // 获取设备IP地址 (兼容 Android 5.1)
         @Suppress("DEPRECATION")
         fun getLocalIpAddress(context: Context): String {
-            val wifiManager = context.getSystemService(Context.WIFI_SERVICE) as WifiManager
-            val wifiInfo = wifiManager.connectionInfo
-            val ipAddress = wifiInfo.ipAddress
-            return if (ipAddress != 0) {
-                String.format(
-                    "%d.%d.%d.%d",
-                    ipAddress and 0xff,
-                    ipAddress shr 8 and 0xff,
-                    ipAddress shr 16 and 0xff,
-                    ipAddress shr 24 and 0xff
-                )
-            } else {
-                "0.0.0.0"
+            // 1) Camino rápido: la IP que reporta el WifiManager (WiFi normal).
+            try {
+                val wifiManager = context.getSystemService(Context.WIFI_SERVICE) as WifiManager
+                val ipAddress = wifiManager.connectionInfo?.ipAddress ?: 0
+                if (ipAddress != 0) {
+                    return String.format(
+                        "%d.%d.%d.%d",
+                        ipAddress and 0xff,
+                        ipAddress shr 8 and 0xff,
+                        ipAddress shr 16 and 0xff,
+                        ipAddress shr 24 and 0xff
+                    )
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "WifiManager IP failed: ${e.message}")
             }
+
+            // 2) Plan B: recorrer las interfaces de red. Necesario cuando la
+            //    pizarra hace de HOTSPOT o va por tethering: el WifiManager
+            //    devuelve 0 (no es una conexión "station") y antes salía
+            //    0.0.0.0 en el QR. Se prefiere wlan/ap/eth y se ignora loopback
+            //    e IPv6.
+            try {
+                val ifaces = java.net.NetworkInterface.getNetworkInterfaces()
+                var fallback: String? = null
+                if (ifaces != null) {
+                    for (iface in java.util.Collections.list(ifaces)) {
+                        if (!iface.isUp || iface.isLoopback) continue
+                        val name = iface.name.lowercase()
+                        for (addr in java.util.Collections.list(iface.inetAddresses)) {
+                            if (addr.isLoopbackAddress || addr !is java.net.Inet4Address) continue
+                            val host = addr.hostAddress ?: continue
+                            if (name.startsWith("wlan") || name.startsWith("ap") ||
+                                name.startsWith("eth") || name.startsWith("en")
+                            ) {
+                                return host // interfaz preferida
+                            }
+                            if (fallback == null) fallback = host // cualquier otra IPv4
+                        }
+                    }
+                }
+                if (fallback != null) return fallback
+            } catch (e: Exception) {
+                Log.w(TAG, "NetworkInterface scan failed: ${e.message}")
+            }
+
+            return "0.0.0.0"
         }
 
         fun isWifiConnected(context: Context): Boolean {
